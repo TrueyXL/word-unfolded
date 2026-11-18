@@ -35,7 +35,7 @@ let user=null;        // {id,name,mode:'local'|'cloud',email}
 let S=null;           // state
 let fbDoc=null, saveTimer=null;
 
-function defaultState(name){return{v:1,name,created:todayStr(),plan:null,read:{},days:{},hl:{},journal:{},prefs:{size:19,purple:true,version:"webbe",theme:document.documentElement.dataset.theme||"sage"},exams:{},cards:{},lastRead:null}}
+function defaultState(name){return{v:1,name,created:todayStr(),plan:null,read:{},round:1,roundStart:todayStr(),history:[],days:{},hl:{},journal:{},prefs:{size:19,purple:true,version:"webbe",theme:document.documentElement.dataset.theme||"sage"},exams:{},cards:{},lastRead:null}}
 function save(){
   if(!user)return;
   LS.set("wu:state:"+user.id,S);
@@ -111,6 +111,16 @@ function streak(){
   return n;
 }
 function markRead(k,on){if(on)S.read[k]=todayStr();else delete S.read[k];save()}
+// Bulk marking for chapters read before using the app: stored as "prior" so it doesn't count toward today's streak.
+function setChapters(b,chs,on){chs.forEach(c=>{const k=key(b,c);if(on){if(!S.read[k])S.read[k]="prior"}else delete S.read[k]});delete S.days[todayStr()];save()}
+const allCh=b=>Array.from({length:BY[b].ch},(_,i)=>i+1);
+function stats(){
+  const tot=n=>n.reduce((a,b)=>a+b.ch,0), rd=n=>n.reduce((a,b)=>a+readCount(b),0);
+  const ot=BOOKS.filter(b=>b.t==="OT"),nt=BOOKS.filter(b=>b.t==="NT");
+  const all=rd(BOOKS);
+  return {all,pct:all/1189*100,ot:rd(ot),otT:tot(ot),nt:rd(nt),ntT:tot(nt),books:BOOKS.filter(b=>readCount(b)===b.ch).length};
+}
+const fmtPct=p=>p>0&&p<1?"<1":Math.floor(p)+"";
 const readCount=b=>{let n=0;for(let c=1;c<=b.ch;c++)if(S.read[key(b.n,c)])n++;return n};
 
 /* ---------- Bible text ---------- */
@@ -361,11 +371,12 @@ function viewToday(){
   render(`${top(`${greet}, ${S.name}`,new Date().toLocaleDateString(undefined,{weekday:"long",month:"long",day:"numeric"}))}
   <div class="card accent"><div class="row" style="gap:16px"><div class="ring" style="--p:${list.length?Math.round(done/list.length*100):100}"><span>${done}/${list.length}</span></div>
    <div class="grow"><div class="small" style="opacity:.85;font-weight:700">TODAY'S READING</div><div style="font-family:var(--f-display);font-size:22px;line-height:1.2">${list.length?(done===list.length?"Done for today 🎉":rangeLabel(list)):"You've finished the Bible! 🎉"}</div>
-   <div class="row small" style="margin-top:6px;opacity:.9;font-weight:700"><span class="row" style="gap:4px"><span style="width:16px;height:16px;display:inline-block">${I.flame}</span>${streak()}-day streak</span><span>· ${pct}% of the Bible</span></div></div></div>
+   <div class="row small" style="margin-top:6px;opacity:.9;font-weight:700"><span class="row" style="gap:4px"><span style="width:16px;height:16px;display:inline-block">${I.flame}</span>${streak()}-day streak</span><span>· ${fmtPct(total/1189*100)}% of the Bible${(S.round||1)>1?` (read-through #${S.round})`:""}</span></div></div></div>
    <div class="bar" style="margin-top:14px"><i style="width:${pct}%"></i></div></div>
   <div class="card" id="rl">${list.map((k,ix)=>{const [b,c]=k.split("|");return `<div class="reading ${ix>=8?"more":""}"><button class="check ${S.read[k]?"on":""}" data-k="${esc(k)}" aria-label="Mark ${esc(b)} ${c} read">${I.check}</button><a class="name" href="#/read/${encodeURIComponent(b)}/${c}">${esc(b)} ${c}</a>${sectionFor(b,+c)&&sectionFor(b,+c).s===+c?'<span class="tag god">Context</span>':""}${EX[b]?'<span class="tag">Quiz</span>':""}<span class="muted">${I.next.replace('<svg','<svg width="18" height="18"')}</span></div>`}).join("")||'<div class="empty">Nothing left. Well done, good and faithful servant.</div>'}${list.length>8?`<button class="btn sm ghost block" id="rlMore" style="margin-top:8px">Show all ${list.length} chapters</button>`:""}</div>
   ${last?`<a class="card row" href="#/read/${encodeURIComponent(last.b)}/${last.c}" style="text-decoration:none;color:inherit"><div class="grow"><div class="eyebrow">Continue</div><b>${esc(last.b)} ${last.c}</b></div>${I.next}</a>`:""}
   <div class="grid2">
+   <a class="card" href="#/progress" style="text-decoration:none;color:inherit;grid-column:1/-1"><div class="eyebrow">My progress ›</div><div class="stat">${fmtPct(total/1189*100)}%</div><div class="muted small">${Object.keys(S.read).length} chapters · mark what you've read</div></a>
    <div class="card"><div class="eyebrow">Left</div><div class="stat">${left}</div><div class="muted small">chapters · ${daysLeft} days</div></div>
    <div class="card"><div class="eyebrow">Notes</div><div class="stat">${Object.values(S.hl).filter(h=>h.note).length+Object.keys(S.journal).length}</div><div class="muted small">highlights & journals</div></div>
   </div>
@@ -403,7 +414,7 @@ let bibleFilter="OT";
 function viewBible(){
   const groups=bibleFilter==="OT"?["Law","History","Wisdom","Major Prophet","Minor Prophet"]:["Gospel","History","Pauline Epistle","Pastoral Epistle","General Epistle","Prophecy"];
   render(`${top("The Bible","66 books · 1,189 chapters")}
-  <div class="chips" style="margin-bottom:14px">${["OT","NT"].map(t=>`<button class="chip ${bibleFilter===t?"on":""}" data-t="${t}">${t==="OT"?"Old Testament":"New Testament"}</button>`).join("")}<a class="chip" href="#/timeline">Prophets timeline</a></div>
+  <div class="chips" style="margin-bottom:14px">${["OT","NT"].map(t=>`<button class="chip ${bibleFilter===t?"on":""}" data-t="${t}">${t==="OT"?"Old Testament":"New Testament"}</button>`).join("")}<a class="chip" href="#/progress">My progress</a><a class="chip" href="#/timeline">Prophets timeline</a></div>
   ${groups.map(g=>{const bs=BOOKS.filter(b=>b.t===bibleFilter&&b.g===g);if(!bs.length)return "";return `<h3 style="margin:18px 0 10px">${g==="Major Prophet"?"Major Prophets":g==="Minor Prophet"?"Minor Prophets":g==="Law"?"The Law (Torah)":g.endsWith("Epistle")?g.replace("Epistle","Letters"):g==="Gospel"?"Gospels":g}</h3><div class="books">${bs.map(b=>{const r=readCount(b);return `<a class="book" href="#/book/${encodeURIComponent(b.n)}"><b>${esc(b.n)}</b><span class="muted small">${b.ch} ch${EX[b.n]?' · <span style="color:var(--accent);font-weight:700">Exam</span>':""}</span><div class="bar"><i style="width:${r/b.ch*100}%"></i></div></a>`}).join("")}</div>`}).join("")}`,"bible");
   $$(".chip[data-t]").forEach(c=>c.onclick=()=>{bibleFilter=c.dataset.t;viewBible()});
 }
@@ -418,9 +429,52 @@ function viewBook(name){
   render(`${top(b.n,b.t==="OT"?"Old Testament":"New Testament","#/bible")}
   ${contextCard(b)}
   <div class="row wrap" style="margin-bottom:14px">${hasEx?`<a class="btn" href="#/exam/${encodeURIComponent(name)}">Take the ${esc(name)} exam</a>`:""}<a class="btn ghost" href="#/cards/${encodeURIComponent(name)}">Flashcards</a></div>
-  <h3 style="margin:6px 0 10px">Chapters <span class="muted small">(${readCount(b)}/${b.ch} read)</span></h3>
-  <div class="chgrid" style="margin-bottom:18px">${Array.from({length:b.ch},(_,i)=>`<a href="#/read/${encodeURIComponent(name)}/${i+1}" class="${S.read[key(name,i+1)]?"read":""}">${i+1}</a>`).join("")}</div>
+  <div class="row between wrap" style="margin:6px 0 10px"><h3>Chapters <span class="muted small">(${readCount(b)}/${b.ch} read · ${Math.round(readCount(b)/b.ch*100)}%)</span></h3>
+   <button class="chip ${bookEdit?"on":""}" id="edit">${bookEdit?"Done marking":"Mark chapters read"}</button></div>
+  ${bookEdit?`<div class="explain" style="margin-bottom:10px">Tap chapters you've already read. <button class="btn sm" id="allOn" style="margin-left:6px">Whole book read</button> <button class="btn sm ghost" id="allOff">Clear</button></div>`:""}
+  <div class="chgrid" style="margin-bottom:18px">${Array.from({length:b.ch},(_,i)=>`<a href="${bookEdit?"javascript:void 0":`#/read/${encodeURIComponent(name)}/${i+1}`}" data-c="${i+1}" class="${S.read[key(name,i+1)]?"read":""}">${i+1}</a>`).join("")}</div>
   ${(SUM[name])?`<h3 style="margin:6px 0 10px">${SECT.some(s=>s.b===name)?"Sections: context & mini tests":"Mini tests"}</h3>${groups.map(g=>`<a class="card row" style="text-decoration:none;color:inherit" href="#/mini/${encodeURIComponent(name)}/${g.s}-${g.e}"><div class="grow"><div class="eyebrow">Ch ${g.s}${g.e!==g.s?"–"+g.e:""}</div><b>${esc(g.title)}</b>${g.ctx?`<div class="muted small" style="margin-top:4px">${esc(g.ctx.slice(0,120))}…</div>`:""}</div>${I.next}</a>`).join("")}`:""}`,"bible");
+  const y=window.__wuY||0;window.__wuY=0;if(y)scrollTo(0,y);
+  $("#edit").onclick=()=>{bookEdit=!bookEdit;window.__wuY=scrollY;viewBook(name)};
+  if(bookEdit){
+    $$(".chgrid a").forEach(a=>a.onclick=e=>{e.preventDefault();const c=+a.dataset.c;const on=!S.read[key(name,c)];setChapters(name,[c],on);a.classList.toggle("read",on)});
+    $("#allOn").onclick=()=>{setChapters(name,allCh(name),true);window.__wuY=scrollY;viewBook(name);toast(name+" marked as read")};
+    $("#allOff").onclick=()=>{setChapters(name,allCh(name),false);window.__wuY=scrollY;viewBook(name)};
+  }
+}
+let bookEdit=false;
+
+/* ---------- PROGRESS ---------- */
+let progOpen=null,progT="OT";
+function viewProgress(){
+  const st=stats();const r=S.round||1;
+  const books=BOOKS.filter(b=>b.t===progT);
+  render(`${top("My progress",`Read-through #${r}${S.roundStart?" · since "+(r===1&&S.roundStart===S.created?"you joined":parseDay(S.roundStart).toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})):""}`,"#/today")}
+  <div class="card accent"><div class="row" style="gap:16px"><div class="ring" style="--p:${st.pct}"><span>${fmtPct(st.pct)}%</span></div>
+   <div class="grow"><div style="font-family:var(--f-display);font-size:22px;line-height:1.2">${st.all} of 1,189 chapters</div><div class="small" style="opacity:.9;font-weight:700;margin-top:4px">${st.books} of 66 books finished</div></div></div>
+   <div class="small" style="margin-top:14px;font-weight:700">Old Testament · ${st.ot}/${st.otT} (${fmtPct(st.ot/st.otT*100)}%)</div><div class="bar" style="margin-top:4px"><i style="width:${st.ot/st.otT*100}%"></i></div>
+   <div class="small" style="margin-top:10px;font-weight:700">New Testament · ${st.nt}/${st.ntT} (${fmtPct(st.nt/st.ntT*100)}%)</div><div class="bar" style="margin-top:4px"><i style="width:${st.nt/st.ntT*100}%"></i></div></div>
+  <div class="card soft small">Already read some of the Bible? Tick whole books here, or open a book to tick single chapters. Your plan recalculates the daily chapters from whatever is left.</div>
+  <div class="chips" style="margin:4px 0 12px">${["OT","NT"].map(t=>`<button class="chip ${progT===t?"on":""}" data-t="${t}">${t==="OT"?"Old Testament":"New Testament"}</button>`).join("")}</div>
+  <div class="card" style="padding:6px 14px">${books.map(b=>{const n=readCount(b),full=n===b.ch;return `<div class="reading" style="flex-wrap:wrap">
+    <button class="check ${full?"on":""}" data-b="${esc(b.n)}" aria-label="Mark all of ${esc(b.n)} read" style="${n&&!full?"border-color:var(--accent);background:var(--accent-soft)":""}">${I.check}</button>
+    <button class="name" data-open="${esc(b.n)}" style="text-align:left">${esc(b.n)}<div class="bar" style="height:5px;margin-top:6px"><i style="width:${n/b.ch*100}%"></i></div></button>
+    <span class="muted small" style="min-width:64px;text-align:right">${n}/${b.ch}</span>
+    ${progOpen===b.n?`<div class="chgrid" style="width:100%;margin:12px 0 4px;grid-template-columns:repeat(auto-fill,minmax(40px,1fr))">${allCh(b.n).map(c=>`<a href="javascript:void 0" data-pb="${esc(b.n)}" data-c="${c}" class="${S.read[key(b.n,c)]?"read":""}">${c}</a>`).join("")}</div>`:""}
+  </div>`}).join("")}</div>
+  <div class="card stack"><h3>Read the Bible again</h3><p class="muted small" style="margin:0">Finished, or want to start fresh? Start a new read-through. Your highlights, notes, journals and exam scores stay, and this read-through is saved in your history.</p>
+   <button class="btn ${st.all===1189?"":"ghost"}" id="newRound">Start read-through #${r+1}</button>
+   ${(S.history||[]).length?`<h3 style="margin-top:8px">History</h3>${S.history.slice().reverse().map(h=>`<div class="reading"><span class="tag ${h.chapters===1189?"":"gold"}">#${h.round}</span><span class="grow">${h.chapters===1189?"Whole Bible finished 🎉":`${h.chapters} chapters (${fmtPct(h.chapters/1189*100)}%)`}</span><span class="muted small">${esc(h.ended)}</span></div>`).join("")}`:""}</div>`,"today");
+  const y=window.__wuY||0;window.__wuY=0;if(y)scrollTo(0,y);
+  const again=()=>{window.__wuY=scrollY;viewProgress()};
+  $$(".chip[data-t]").forEach(c=>c.onclick=()=>{progT=c.dataset.t;progOpen=null;viewProgress()});
+  $$("[data-open]").forEach(x=>x.onclick=()=>{progOpen=progOpen===x.dataset.open?null:x.dataset.open;again()});
+  $$(".check[data-b]").forEach(x=>x.onclick=()=>{const b=x.dataset.b,full=readCount(BY[b])===BY[b].ch;setChapters(b,allCh(b),!full);again()});
+  $$("[data-pb]").forEach(a=>a.onclick=()=>{const b=a.dataset.pb,c=+a.dataset.c;setChapters(b,[c],!S.read[key(b,c)]);again()});
+  $("#newRound").onclick=()=>openSheet(`<b style="font-size:18px">Start read-through #${r+1}?</b><p class="muted">${st.all} chapters in read-through #${r} will be saved to your history and your checkmarks reset to 0%. Notes and highlights stay.</p><div class="row"><button class="btn" id="yes">Start #${r+1}</button><button class="btn ghost" id="no">Cancel</button></div>`)||wireRound();
+  function wireRound(){setTimeout(()=>{const yes=$("#yes");if(!yes)return;$("#no").onclick=closeSheet;yes.onclick=()=>{
+    S.history=S.history||[];S.history.push({round:r,started:S.roundStart||S.created,ended:todayStr(),chapters:st.all});
+    S.read={};S.round=r+1;S.roundStart=todayStr();S.days={};save();closeSheet();toast(`Read-through #${r+1} started. Let's go!`);viewProgress()}},0)}
 }
 
 /* ---------- READER ---------- */
@@ -622,7 +676,7 @@ function download(name,content,type){const a=document.createElement("a");a.href=
 function viewMe(){
   const url=location.origin+location.pathname;
   render(`${top(S.name,user.mode==="cloud"?(user.email||"Signed in"):"Profile on this device")}
-  <div class="grid2"><div class="card"><div class="eyebrow">Read</div><div class="stat">${Object.keys(S.read).length}</div><div class="muted small">of 1,189 chapters</div></div><div class="card"><div class="eyebrow">Streak</div><div class="stat">${streak()}</div><div class="muted small">days in a row</div></div></div>
+  <div class="grid2"><div class="card"><div class="eyebrow">Read</div><div class="stat">${Object.keys(S.read).length}</div><div class="muted small">of 1,189 chapters · <a href="#/progress">progress</a></div></div><div class="card"><div class="eyebrow">Streak</div><div class="stat">${streak()}</div><div class="muted small">days in a row</div></div></div>
   <div class="card stack"><h3>Invite someone into the Word</h3><p class="muted small" style="margin:0">Share the app. Each person signs in and gets their own plan, notes and progress.</p><div id="qr" style="display:grid;place-items:center;padding:8px;background:#fff;border-radius:14px;width:180px;height:180px;margin:4px auto"></div><div class="row"><button class="btn" id="share">Share link</button><button class="btn ghost" id="copy">Copy link</button></div></div>
   <div class="card stack"><h3>Plan</h3><div class="muted small">Finish by <b>${S.plan?parseDay(S.plan.end).toLocaleDateString(undefined,{month:"long",day:"numeric",year:"numeric"}):"not set"}</b> · ${S.plan?{canonical:"Genesis → Revelation",mixed:"Old + New together",ntfirst:"NT & Prophets first"}[S.plan.order]:""}</div><div class="row wrap"><a class="btn ghost sm" href="#/setup">Edit plan</a><button class="btn ghost sm" id="ics">Add daily reminder to calendar</button></div></div>
   <div class="card stack"><h3>Palette</h3>${themePicker()}</div>
@@ -664,6 +718,7 @@ function route(){
     case "notes":return viewNotes();
     case "memory":return viewMemory();
     case "me":return viewMe();
+    case "progress":return viewProgress();
     default:return viewToday();
   }
 }
