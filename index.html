@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Word Unfolded</title>
+<meta name="description" content="Read the whole Bible on your schedule, with book context, word banks, God's words in purple, highlights, notes, flashcards and exams.">
+<meta name="theme-color" content="#4F7A63">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-192.png">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Word Unfolded">
+<meta property="og:title" content="Word Unfolded: read the whole Bible and actually understand it">
+<meta property="og:description" content="A reading plan, context for every book, word banks, quizzes, flashcards and exams.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500&family=Newsreader:ital,opsz,wght@0,6..72,400;0,6..72,500;1,6..72,400&family=Plus+Jakarta+Sans:wght@400;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<script>try{var t=localStorage.getItem('wu:theme');if(t)document.documentElement.dataset.theme=t;else if(matchMedia('(prefers-color-scheme: dark)').matches)document.documentElement.dataset.theme='midnight'}catch(e){}</script>
+</head>
+<body>
+<div id="app"></div>
+<div class="sheet-bg" id="sheetBg"></div>
+<div class="sheet" id="sheet"></div>
+<div class="toast" id="toast"></div>
+<script src="firebase-config.js"></script>
+<script src="data/books.js"></script>
+<script src="data/glossary.js"></script>
+<script src="data/prophets.js"></script>
+<script src="data/summaries-prophets.js"></script>
+<script src="data/summaries-nt.js"></script>
+<script src="data/exams-prophets.js"></script>
+<script src="data/exams-nt.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
